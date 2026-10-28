@@ -5,7 +5,7 @@ from fastapi import Request
 
 ROOT = Path(__file__).resolve().parent
 MODEL = ROOT / 'models/best.pt'
-if not MODEL.is_file():
+if modal.is_local() and not MODEL.is_file():
     raise FileNotFoundError(f'Run prepare_model.py first: {MODEL}')
 app = modal.App('powerline-yolo26m-benchmark')
 image = (modal.Image.debian_slim(python_version='3.11')
@@ -25,3 +25,9 @@ class Detector:
     async def detect(self, request: Request):
         from powerline_ai.media import read_image
         return self.detector.predict(await read_image(request))
+
+    @modal.method()
+    def predict_jpeg(self, data: bytes):
+        """Authenticated SDK path for local camera testing; uses Modal profile."""
+        from powerline_ai.media import decode_image
+        return self.detector.predict(decode_image(data))

@@ -2,3 +2,5 @@
 *_ncnn_model/
 __pycache__/
 .venv/
+
+camera-output/

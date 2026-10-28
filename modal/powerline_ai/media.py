@@ -10,6 +10,11 @@ async def read_image(request):
         if len(data) + len(chunk) > MAX_BYTES:
             raise HTTPException(413, 'Image exceeds 10 MiB')
         data.extend(chunk)
+    return decode_image(data)
+
+def decode_image(data):
+    if len(data) > MAX_BYTES:
+        raise HTTPException(413, "Image exceeds 10 MiB")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
