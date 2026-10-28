@@ -1,0 +1,5 @@
+.env
+categories.json
+state/
+__pycache__/
+.venv/

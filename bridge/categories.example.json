@@ -1,0 +1,8 @@
+{
+  "insulator": null,
+  "insulator_broken": "REPLACE_WITH_DB_CODE",
+  "insulator_flashover": "REPLACE_WITH_DB_CODE",
+  "bird_nest": "REPLACE_WITH_DB_CODE",
+  "foreign_object": "REPLACE_WITH_DB_CODE",
+  "broken_strand": "REPLACE_WITH_DB_CODE"
+}

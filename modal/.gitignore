@@ -1,0 +1,4 @@
+*.pt
+*_ncnn_model/
+__pycache__/
+.venv/

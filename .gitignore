@@ -1,0 +1,14 @@
+
+# Secrets and runtime artifacts, shared by every deployment target
+.env
+.env.*
+!.env.example
+*.key
+*.token
+*.sqlite3*
+__pycache__/
+.venv/
+*.pt
+*.onnx
+*.onnx.data
+*_ncnn_model/

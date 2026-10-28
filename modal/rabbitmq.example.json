@@ -1,0 +1,16 @@
+{
+  "status": "topology reference; consumer implementation in ../bridge",
+  "request_exchange": "identity-exchange",
+  "exchange_type": "topic",
+  "image_queue": "ai.analysis.server.image.requested",
+  "image_routing_key": "identity.event.aianalysisrequestedevent.server.image",
+  "video_queue": "ai.analysis.server.video.requested",
+  "video_routing_key": "identity.event.aianalysisrequestedevent.server.video",
+  "request_dlx": "ai.analysis.dlx",
+  "result_exchange": "identity-exchange",
+  "result_routing_key": "identity.event.aianalysisresultevent",
+  "result_queue": "ai.analysis.result",
+  "prefetch_count": 1,
+  "manual_ack": true,
+  "publisher_confirms": true
+}

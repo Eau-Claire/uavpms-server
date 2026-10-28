@@ -1,0 +1,8 @@
+{
+  "model": "curated_yolo26m",
+  "uri": "stash://bunpmc/projects/curated_yolo26m/weights/best.pt",
+  "status": "local file present and hashed; model load and taxonomy validation pending",
+  "local_path": "models/best.pt",
+  "sha256": "65877bab3405bbec4a91ae888cad67c5f4a1bee8e43a56dd9331e229a12c4db0",
+  "size_bytes": 44018841
+}

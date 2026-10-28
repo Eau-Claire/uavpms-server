@@ -1,0 +1,16 @@
+services:
+  ai-bridge:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./categories.json:/config/categories.json:ro
+      - bridge-state:/state
+    networks:
+      - backend
+volumes:
+  bridge-state:
+networks:
+  backend:
+    external: true
+    name: ${BE_DOCKER_NETWORK:-uavpms_default}
