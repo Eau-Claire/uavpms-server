@@ -28,6 +28,6 @@ class Detector:
 
     @modal.method()
     def predict_jpeg(self, data: bytes):
-        """Authenticated SDK path for local camera testing; uses Modal profile."""
+        """Authenticated SDK path for image and sampled-video tests; uses Modal profile."""
         from powerline_ai.media import decode_image
         return self.detector.predict(decode_image(data))

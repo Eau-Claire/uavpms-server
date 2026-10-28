@@ -7,6 +7,5 @@
   "max_containers": 1,
   "authentication": "Modal proxy tokens for HTTP; Modal profile for SDK",
   "smoke_test": "SDK predict_jpeg succeeded on synthetic gray 640x640 JPEG; not accuracy validation",
-  "predict_ms": 44.313174999999205,
-  "camera_test": "LAN URL unreachable at test time; awaiting reachable stream"
+  "predict_ms": 44.313174999999205
 }
