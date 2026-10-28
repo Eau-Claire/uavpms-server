@@ -64,3 +64,20 @@ python camera_test.py --camera-url http://IPHONE-IP:PORT/video --frames 10 --sho
 ```
 
 Bỏ `--show` trên máy headless; thêm `--output-dir camera-output` nếu muốn lưu ảnh có bbox và JSON (mặc định không lưu). `--interval 1` là thời gian nghỉ sau mỗi lần inference, không bảo đảm 1 FPS. Client mặc định chỉ gọi 10 frame; lần đầu có cold start. `q` đóng cửa sổ khi đang hiển thị hoặc Ctrl+C dừng. Với ảnh tĩnh dùng `--image /path/test.jpg`. SDK method `predict_jpeg` yêu cầu tài khoản Modal có quyền app, không phải API anonymous. Không cấp token quản trị Modal này cho Pi; Pi production dùng luồng riêng.
+
+
+## Giao diện web test ảnh/video
+
+Từ thư mục `modal`, tạo venv nếu chưa có (không cài pip vào Python hệ thống):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-ui.txt
+python -m modal setup # bỏ qua nếu đã đăng nhập đúng workspace
+python test_ui/server.py
+```
+
+Mở http://127.0.0.1:8765 . Chọn ảnh JPEG/PNG hoặc video, bấm Gửi lên AI. Video mặc định 1 frame/s, tối đa 10 frame đầu (có thể chọn 1–30); hiển thị từng frame có bbox và tải JSON. Có nút dừng sau request hiện tại. Đây là UI test local dùng SDK Modal/profile của máy, không phải UI public/BE; token không đưa vào JavaScript. Preview file là local, chỉ frame được chọn mới gửi GPU. Mỗi lần chỉ xử lý một file; không tự chạy lại khi đổi lựa chọn. Giới hạn upload 100 MiB, mỗi frame 20 MP/10 MiB JPEG; không kiểm tra toàn video khi giới hạn số frame thấp.
+
+File upload tạm được xóa sau xử lý; kết quả giữ trong RAM tới job tiếp theo hoặc restart. Không có durable queue, multi-user, tự retry hay đồng bộ BE. Chỉ bind loopback, không expose service này ra Internet. Đóng tab không tự hủy job; bấm Dừng hoặc dừng process server.
