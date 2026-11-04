@@ -1,0 +1,22 @@
+services:
+  inference:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+    environment:
+      MODEL_PATH: /models/best.pt
+      DEVICE: cpu
+      IMAGE_SIZE: "640"
+      CONFIDENCE: "0.25"
+      DETECT_API_TOKEN: ${DETECT_API_TOKEN:?Set DETECT_API_TOKEN in .env}
+    volumes:
+      - ../modal/models/best.pt:/models/best.pt:ro
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs: [/tmp:size=256m,mode=1777]
+    deploy:
+      resources:
+        limits:
+          memory: 6G

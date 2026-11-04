@@ -3,6 +3,7 @@
 AI server deployment, độc lập với repo training và [Pi edge](https://github.com/Eau-Claire/uavpms-edge).
 
 - [modal/](modal/README.md): GPU endpoint curated YOLO26m, proxy authentication.
+- [inference/](inference/README.md): persistent CPU Docker API using the same curated YOLO26m taxonomy.
 - [bridge/](bridge/README.md): worker cạnh BE, RabbitMQ → Modal → RabbitMQ result; Docker Compose và durable job store.
 - [BE_HANDOFF.md](BE_HANDOFF.md): contract/mapping và yêu cầu idempotency phía BE.
 
