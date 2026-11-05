@@ -1,3 +1,6 @@
 aio-pika>=9.4,<10
 requests>=2.32,<3
-opencv-python-headless>=4.10,<5
+# Keep the bridge runnable on older VPS CPUs without x86-64-v2. New NumPy
+# wheels use a higher CPU baseline and fail during import on this host.
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
