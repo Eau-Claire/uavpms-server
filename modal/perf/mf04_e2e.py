@@ -308,9 +308,10 @@ def run(a):
             error=r[5] if r else None,
             # client clock: upload start -> run seen terminal in DB (polled every 1 s)
             e2e_ms=round((done_at[mid] - u['upload_started']) * 1000) if mid in done_at else None,
-            # server clock (DB timestamps)
-            queue_ms=round((r[7] - r[6]).total_seconds() * 1000) if r and r[7] else None,
-            ai_ms=round((r[8] - r[7]).total_seconds() * 1000) if r and r[7] and r[8] else None,
+            # VPS clock. CreatedAt = run queued by BE; CompletedAt = result built by the bridge (after Modal);
+            # StartedAt = BE received the result (set on first result message, not when work started).
+            bridge_done_ms=round((r[8] - r[6]).total_seconds() * 1000) if r and r[8] else None,
+            result_delivery_ms=round((r[7] - r[8]).total_seconds() * 1000) if r and r[7] and r[8] else None,
             detections=len(ans), classes=sorted({x[2] for x in ans}),
             bbox_invalid=sum(not bbox_ok(x[4], x[7], x[8]) for x in ans),
             no_severity=sum(m is None for m in sev),
@@ -361,8 +362,8 @@ def run(a):
         upload_errors=[dict(file=u['file'], status=u['status'], error=u.get('error')) for u in uploads if 'media_id' not in u],
         concurrency=a.concurrency, preflight=pre, bridge_events=events, duplicate=duplicate, review=review,
         timing_ms=dict(upload=stats([x['upload_ms'] for x in rows]), e2e_upload_to_db_completed=stats(e2e),
-                       queue_wait_server=stats([x['queue_ms'] for x in rows]),
-                       ai_processing_server=stats([x['ai_ms'] for x in rows])),
+                       queued_to_bridge_done=stats([x['bridge_done_ms'] for x in rows]),
+                       bridge_done_to_be_received=stats([x['result_delivery_ms'] for x in rows])),
         wall_s=round(analyst_seen_at - t0, 1), detections=sum(x['detections'] for x in rows),
         severity_by_class=severity_by_class, logs=logs, checks=checks,
         result='Passed' if all(checks.values()) else 'Failed')
