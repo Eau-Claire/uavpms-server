@@ -159,8 +159,17 @@ def login(roles_file, role, otp=None):
 
 
 def unique_bytes(path: Path) -> bytes:
-    """Same image, new checksum: bytes after the JPEG EOI / PNG IEND are ignored by decoders."""
-    return path.read_bytes() + f'\nmf04-e2e-{uuid.uuid4()}'.encode()
+    """Same image, new checksum, still a valid file (the backend rejects trailing bytes):
+    JPEG gets a COM segment right after SOI, PNG a tEXt chunk right after IHDR."""
+    data, tag = path.read_bytes(), f'mf04-e2e-{uuid.uuid4()}'.encode()
+    if data[:2] == b'\xff\xd8':
+        return data[:2] + b'\xff\xfe' + (len(tag) + 2).to_bytes(2, 'big') + tag + data[2:]
+    if data[:8] == b'\x89PNG\r\n\x1a\n':
+        import zlib
+        body = b'tEXt' + b'Comment\x00' + tag
+        chunk = (len(body) - 4).to_bytes(4, 'big') + body + zlib.crc32(body).to_bytes(4, 'big')
+        return data[:33] + chunk + data[33:]
+    raise SystemExit(f'{path.name}: only JPEG and PNG are supported')
 
 
 def upload(client, token, mission, path, data):
