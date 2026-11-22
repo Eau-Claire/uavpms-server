@@ -200,7 +200,7 @@ def run(a):
     files = sorted(p for p in Path(a.images).iterdir() if p.suffix.lower() in IMAGE_EXTS)[:a.count]
     if not files:
         raise SystemExit('no images')
-    inspector, analyst = login(a.roles, 'inspector'), login(a.roles, 'analyst')
+    inspector, analyst = login(a.roles, a.uploader_role), login(a.roles, 'analyst')
     out = Path(a.out) / f'{datetime.now():%Y-%m-%d_%H%M}_{a.label}'
     out.mkdir(parents=True, exist_ok=True)
     events = []
@@ -375,6 +375,8 @@ def main():
     p.add_argument('--ignore-preflight', action='store_true')
     p.add_argument('--roles', help="JSON with 'inspector' and 'analyst': email, password, deviceTrustToken "
                    "(same format as the backend api-test roles.json)")
+    p.add_argument('--uploader-role', default='inspector',
+                   help='roles-file key used to upload (inspector assigned to the mission, or systemAdmin)')
     p.add_argument('--out', default=str(HERE / 'results' / 'mf04_e2e'))
     a = p.parse_args()
     if a.command == 'preflight':
