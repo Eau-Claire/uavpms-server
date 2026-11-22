@@ -99,7 +99,7 @@ st.sidebar.header('Ảnh mẫu có label')
 dataset = st.sidebar.text_input('Thư mục dataset (chứa images/ và labels/)', '')
 split = st.sidebar.selectbox('Split', ('val', 'test'))
 n_samples = st.sidebar.number_input('Số ảnh mẫu', 1, 20, 4)
-fo_only = st.sidebar.checkbox('Chỉ ảnh có foreign_object', value=False)
+only_class = st.sidebar.selectbox('Chỉ lấy ảnh có class', ('(tất cả)',) + CLASSES)
 
 if 'results' not in st.session_state:
     st.session_state.results = {}  # sha256 -> (name, bytes, result, label_path or None)
@@ -126,8 +126,8 @@ if send_samples:
         st.error(f'Không thấy {images_dir}')
     else:
         pool = [p for p in images_dir.iterdir() if p.suffix.lower() in IMAGE_EXTS]
-        if fo_only:
-            pool = [p for p in pool if has_class(labels_dir / f'{p.stem}.txt', CLASSES.index('foreign_object'))]
+        if only_class != '(tất cả)':
+            pool = [p for p in pool if has_class(labels_dir / f'{p.stem}.txt', CLASSES.index(only_class))]
         for p in random.sample(pool, min(int(n_samples), len(pool))):
             jobs.append((p.name, p.read_bytes(), labels_dir / f'{p.stem}.txt'))
         if not pool:
