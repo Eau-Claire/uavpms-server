@@ -33,8 +33,6 @@ The mission must be Executing or Completed. Use a test mission: uploads and revi
 from __future__ import annotations
 
 import argparse
-import base64
-import hashlib
 import json
 import os
 import re
@@ -138,10 +136,9 @@ def _token(body):
             or (data.get('authResult') or {}).get('accessToken'))
 
 
-def login(roles_file, role, redis_container=None):
-    """Log in through the gateway. Trusted-device token first; if the backend still asks for an OTP and
-    redis_container is given, use the backend api-test method: put a known OTP (000000, 180 s TTL) for this
-    test account in Redis and verify it (same key format as api-test/scripts/set_test_otp.py)."""
+def login(roles_file, role, otp=None):
+    """Log in through the gateway: trusted-device token first; if the backend still asks for an OTP,
+    verify with the given test OTP (the staging backend accepts a fixed mock OTP for test accounts)."""
     spec = json.loads(Path(roles_file).read_text(encoding='utf-8'))[role]
     if spec.get('token'):
         return spec['token']
@@ -151,18 +148,13 @@ def login(roles_file, role, redis_container=None):
         r = c.post('/api/v1/auth/login', json={'email': email, 'password': spec['password']}, headers=headers)
         body = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
         token = _token(body)
-        if r.status_code == 200 and not token and 'otp' in str(body.get('message', '')).lower() and redis_container:
-            otp = '000000'
-            hashed = base64.b64encode(hashlib.sha256(otp.encode()).digest()).decode()
-            key = f'otp:login:{email}'
-            sh('docker', 'exec', redis_container, 'redis-cli', 'SETEX', key, '180', hashed, check=True)
-            sh('docker', 'exec', redis_container, 'redis-cli', 'DEL', f'{key}:attempts', check=True)
+        if r.status_code == 200 and not token and 'otp' in str(body.get('message', '')).lower() and otp:
             r = c.post('/api/v1/auth/otp/verify', json={'email': email, 'otp': otp, 'purpose': 'Login'})
             body = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
             token = _token(body)
     if r.status_code != 200 or not token:
         raise SystemExit(f'login as {role} failed ({r.status_code}): {r.text[:200]}. '
-                         'Register the deviceTrustToken, put a token in the roles file, or pass --otp-via-redis.')
+                         'Register the deviceTrustToken, put a token in the roles file, or pass --otp.')
     return token
 
 
@@ -218,8 +210,7 @@ def run(a):
     files = sorted(p for p in Path(a.images).iterdir() if p.suffix.lower() in IMAGE_EXTS)[:a.count]
     if not files:
         raise SystemExit('no images')
-    redis = a.redis_container if a.otp_via_redis else None
-    inspector, analyst = login(a.roles, a.uploader_role, redis), login(a.roles, 'analyst', redis)
+    inspector, analyst = login(a.roles, a.uploader_role, a.otp), login(a.roles, 'analyst', a.otp)
     out = Path(a.out) / f'{datetime.now():%Y-%m-%d_%H%M}_{a.label}'
     out.mkdir(parents=True, exist_ok=True)
     events = []
@@ -396,9 +387,7 @@ def main():
                    "(same format as the backend api-test roles.json)")
     p.add_argument('--uploader-role', default='inspector',
                    help='roles-file key used to upload (inspector assigned to the mission, or systemAdmin)')
-    p.add_argument('--otp-via-redis', action='store_true',
-                   help='test accounts only: set a known login OTP in Redis when the backend asks for one')
-    p.add_argument('--redis-container', default='uav-redis')
+    p.add_argument('--otp', default=os.getenv('E2E_OTP'), help='test OTP used when the backend asks for one')
     p.add_argument('--out', default=str(HERE / 'results' / 'mf04_e2e'))
     a = p.parse_args()
     if a.command == 'preflight':
