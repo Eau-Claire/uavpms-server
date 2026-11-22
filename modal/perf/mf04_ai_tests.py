@@ -187,12 +187,16 @@ def run(a):
         print(f'Waiting {a.cold_wait}s for the container to scale to zero...', flush=True)
         time.sleep(a.cold_wait)
         r, err = ep.call('COLD', jpeg(Image.open(val[0])), 'cold start')
-        cold = dict(roundtrip_ms=CALLS[-1]['roundtrip_ms'], predict_ms=r and r['predict_ms'], error=err)
         res0 = ep.resources()
-        cold['model_load_s'] = res0['model_load_s']
+        # Valid only if this container booted for this request: it has served exactly that one call.
+        genuine = res0['served'] == 1 and res0['uptime_s'] < a.cold_wait
+        cold = dict(roundtrip_ms=CALLS[-1]['roundtrip_ms'], predict_ms=r and r['predict_ms'], error=err,
+                    model_load_s=res0['model_load_s'], container_uptime_s=res0['uptime_s'],
+                    container_served=res0['served'], genuine_cold_start=genuine)
         add('AI-PERF-00', 'Cold start (container khởi động + nạp model + lần predict đầu)',
-            'Chỉ đo, báo riêng; không tính vào trung bình', cold, None,
-            'Modal scale-to-zero sau 60 s không có request')
+            'Chỉ đo, báo riêng; hợp lệ khi container phục vụ đúng 1 request (request này)', cold, None,
+            'Modal scale-to-zero sau khi rảnh' + ('' if genuine else
+            '; KHÔNG HỢP LỆ: container chưa tắt nên đây không phải cold start, cần chờ lâu hơn'))
     else:
         ep.call('WARMUP', jpeg(Image.open(val[0])), 'warm-up')
 
@@ -461,7 +465,7 @@ def main():
     p.add_argument('--rob-images', type=int, default=150)
     p.add_argument('--limit', type=int, default=0, help='cap images per accuracy split (0 = all; for dry runs)')
     p.add_argument('--soak-minutes', type=float, default=30)
-    p.add_argument('--cold-wait', type=int, default=90, help='idle seconds before the cold-start call (0 = skip)')
+    p.add_argument('--cold-wait', type=int, default=300, help='idle seconds before the cold-start call (0 = skip)')
     p.add_argument('--out', type=Path, default=ROOT / 'perf' / 'results')
     a = p.parse_args()
     run_at = datetime.now().strftime('%Y-%m-%d_%H%M')
