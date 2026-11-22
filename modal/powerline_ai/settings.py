@@ -7,8 +7,13 @@ MODEL_NAME = 'seed85_curated_yolo26m'
 MODEL_PATH = '/models/best.pt'
 IMAGE_SIZE = 640
 NMS_IOU = 0.6
-MAX_BYTES = 10 * 1024 * 1024
-MAX_PIXELS = 20_000_000
+# Square letterbox, as in training and threshold tuning. Ultralytics' default for a single
+# image is a minimal rectangle, which lowered val recall from 0.840 to 0.813 for this model.
+LETTERBOX_RECT = False
+# UAV cameras: DJI writes MPO (multi-picture JPEG); full-resolution frames reach ~50 MP / ~50 MiB.
+IMAGE_FORMATS = ('JPEG', 'MPO', 'PNG')
+MAX_BYTES = 50 * 1024 * 1024
+MAX_PIXELS = 60_000_000
 
 # thresholds.json (written by tune_thresholds.py) overrides the defaults in PostprocessConfig.
 _THRESHOLDS = Path(__file__).with_name('thresholds.json')

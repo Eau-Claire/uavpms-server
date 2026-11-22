@@ -22,7 +22,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from powerline_ai.postprocess import CLASSES, PostprocessConfig, overlap, postprocess
-from powerline_ai.settings import NMS_IOU, IMAGE_SIZE, load_postprocess_config
+from powerline_ai.settings import IMAGE_SIZE, LETTERBOX_RECT, NMS_IOU, load_postprocess_config
 
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
 GRID = [round(0.05 * i, 2) for i in range(2, 19)]  # 0.10 .. 0.90
@@ -69,7 +69,7 @@ def predict_split(a, weights_sha):
     cache = a.cache or Path(__file__).with_name('.cache') / f'raw_{a.images.name}_{weights_sha[:12]}.json'
     cache.parent.mkdir(parents=True, exist_ok=True)
     key = dict(weights_sha256=weights_sha, images=str(a.images.resolve()), imgsz=IMAGE_SIZE,
-               nms_iou=NMS_IOU, raw_conf=RAW_CONF)
+               nms_iou=NMS_IOU, rect=LETTERBOX_RECT, raw_conf=RAW_CONF)
     if cache.is_file():
         data = json.loads(cache.read_text(encoding='utf-8'))
         if data.get('key') == key:
@@ -84,7 +84,7 @@ def predict_split(a, weights_sha):
     for s in range(0, len(images), a.batch):
         chunk = images[s:s + a.batch]
         results = model.predict([str(p) for p in chunk], imgsz=IMAGE_SIZE, conf=RAW_CONF, iou=NMS_IOU,
-                                device=a.device, verbose=False)
+                                rect=LETTERBOX_RECT, device=a.device, verbose=False)
         for img, r in zip(chunk, results):
             b = r.boxes.cpu()
             h, w = r.orig_shape

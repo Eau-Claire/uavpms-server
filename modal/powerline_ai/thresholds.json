@@ -6,26 +6,25 @@
     "match_iou": 0.5,
     "objective": "per-class F1 thresholds, step choice by macro-F1",
     "before": {
-      "macro_f1": 0.8169,
+      "macro_f1": 0.8166,
       "micro": {
-        "precision": 0.8583072100313479,
-        "recall": 0.8545568039950062,
-        "f1": 0.856427901157335,
-        "fp": 452,
-        "fn": 466
+        "precision": 0.8580827067669173,
+        "recall": 0.8548689138576779,
+        "f1": 0.8564727954971858,
+        "fp": 453,
+        "fn": 465
       }
     },
     "chosen": {
-      "macro_f1": 0.8244,
+      "macro_f1": 0.8241,
       "micro": {
-        "precision": 0.8916859887379928,
-        "recall": 0.8401997503121099,
-        "f1": 0.8651775670898282,
-        "fp": 327,
-        "fn": 512
+        "precision": 0.8914266799073155,
+        "recall": 0.8405118601747815,
+        "f1": 0.8652208835341365,
+        "fp": 328,
+        "fn": 511
       }
-    },
-    "tie_break": "fewer enabled steps"
+    }
   },
   "class_confidence": {
     "insulator": 0.35,

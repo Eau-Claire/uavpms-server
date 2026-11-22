@@ -25,7 +25,7 @@ COLORS = {'insulator': (66, 135, 245), 'insulator_broken': (235, 64, 52),
           'insulator_flashover': (245, 166, 35), 'bird_nest': (139, 87, 42),
           'foreign_object': (200, 50, 220), 'broken_strand': (20, 190, 190)}
 GT_COLOR = (40, 200, 40)
-MAX_BYTES = 10 * 1024 * 1024
+MAX_BYTES = 50 * 1024 * 1024  # keep in sync with powerline_ai.settings.MAX_BYTES
 IMAGE_EXTS = ('.jpg', '.jpeg', '.png')
 
 st.set_page_config(page_title='UAVPMS detector test', layout='wide')
@@ -81,7 +81,7 @@ def draw(image: Image.Image, detections, gt=None) -> Image.Image:
 
 
 def to_payload(image_bytes: bytes) -> bytes:
-    """The endpoint accepts JPEG/PNG up to 10 MiB; re-encode anything larger as JPEG."""
+    """The endpoint accepts JPEG/MPO/PNG up to MAX_BYTES; re-encode anything larger as JPEG."""
     if len(image_bytes) <= MAX_BYTES:
         return image_bytes
     with Image.open(io.BytesIO(image_bytes)) as im:
@@ -109,7 +109,7 @@ st.write('Chọn ảnh rồi bấm **Gửi lên AI**. Box màu là dự đoán c
 
 col_up, col_sample = st.columns(2)
 with col_up:
-    uploads = st.file_uploader('Ảnh JPEG/PNG', type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+    uploads = st.file_uploader('Ảnh JPEG/MPO/PNG', type=['jpg', 'jpeg', 'png', 'mpo'], accept_multiple_files=True)
     send_uploads = st.button('Gửi lên AI', type='primary', disabled=not uploads)
 with col_sample:
     st.write('Ảnh mẫu từ dataset (có label để so)')
