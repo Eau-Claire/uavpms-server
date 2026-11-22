@@ -1,5 +1,7 @@
 import time
-from .settings import CLASSES, MODEL_PATH, IMAGE_SIZE, CONFIDENCE
+from .postprocess import postprocess
+from .settings import CLASSES, MODEL_NAME, MODEL_PATH, IMAGE_SIZE, NMS_IOU, POSTPROCESS
+
 
 class YoloDetector:
     def __init__(self):
@@ -11,11 +13,14 @@ class YoloDetector:
 
     def predict(self, frame):
         started = time.perf_counter()
-        result = self.model.predict(frame, imgsz=IMAGE_SIZE, conf=CONFIDENCE,
-                                    device=0, half=False, verbose=False)[0]
+        # Predict at the lowest per-class threshold; postprocess applies each class's own threshold.
+        result = self.model.predict(frame, imgsz=IMAGE_SIZE, conf=POSTPROCESS.min_confidence,
+                                    iou=NMS_IOU, device=0, half=False, verbose=False)[0]
         boxes = result.boxes.cpu()
-        detections = [dict(class_id=int(c), class_name=CLASSES[int(c)],
-                           confidence=float(s), bbox_xyxy=b)
-                      for b, s, c in zip(boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist())]
-        return dict(model='curated_yolo26m', width=frame.width, height=frame.height,
-                    detections=detections, predict_ms=(time.perf_counter()-started)*1000)
+        raw = [dict(class_id=int(c), class_name=CLASSES[int(c)],
+                    confidence=float(s), bbox_xyxy=b)
+               for b, s, c in zip(boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist())]
+        detections = postprocess(raw, POSTPROCESS)
+        return dict(model=MODEL_NAME, width=frame.width, height=frame.height,
+                    detections=detections, raw_count=len(raw),
+                    predict_ms=(time.perf_counter()-started)*1000)
