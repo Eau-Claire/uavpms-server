@@ -1,4 +1,4 @@
-"""One Linux worker per durable volume. RabbitMQ inbox handoff then GPU processing."""
+"""One Linux worker process per durable volume. RabbitMQ inbox handoff, then up to WORKERS jobs at once."""
 import asyncio
 import fcntl
 import json
@@ -35,11 +35,10 @@ async def main():
         for kind in ('image','video'):
             queue=await consumer.get_queue(f'ai.analysis.server.{kind}.requested',ensure=True)
             await queue.consume(receive)
-        while True:
-            row=store.pending()
-            if row is None:
-                await asyncio.sleep(1);continue
-            identifier,body,attempts,saved=row; request=json.loads(body)
+        async def handle(identifier,body,attempts,saved):
+            """One job: process (unless a result is already saved), save, publish. Store calls stay on the
+            event-loop thread; only process() runs in a worker thread."""
+            request=json.loads(body)
             if saved is None:
                 if attempts>=3:
                     result=event(request,error='WORKER_ATTEMPTS_EXHAUSTED')
@@ -48,8 +47,9 @@ async def main():
                     try: result=await asyncio.to_thread(process,request,config)
                     except Exception as exc:
                         print(json.dumps({'request_id':identifier,'stage':'processing_failed','error':type(exc).__name__}),flush=True)
-                        await asyncio.sleep(5);continue
+                        await asyncio.sleep(5);return
                 store.save_result(identifier,result)
+                print(json.dumps({'request_id':identifier,'stage':'processed','ms':result.get('ProcessingTimeMs')}),flush=True)
             else: result=json.loads(saved)
             try:
                 await exchange.publish(aio_pika.Message(json.dumps(result).encode(),
@@ -61,5 +61,22 @@ async def main():
             except Exception as exc:
                 print(json.dumps({'request_id':identifier,'stage':'publish_retry','error':type(exc).__name__}),flush=True)
                 await asyncio.sleep(5)
+
+        # Up to config['workers'] jobs at once: overlaps network time to storage and Modal. A job is never
+        # handled twice concurrently (in-flight ids are excluded); retries and restarts behave as before.
+        inflight={}
+        while True:
+            for identifier,task in list(inflight.items()):
+                if task.done():
+                    inflight.pop(identifier)
+                    if task.exception(): raise task.exception()
+            free=config['workers']-len(inflight)
+            rows=store.pending_batch(inflight.keys(),free) if free>0 else []
+            for row in rows:
+                inflight[row[0]]=asyncio.create_task(handle(*row))
+            if inflight and (free<=len(rows) or not rows):
+                await asyncio.wait(inflight.values(),timeout=1,return_when=asyncio.FIRST_COMPLETED)
+            elif not rows:
+                await asyncio.sleep(1)
 
 if __name__=='__main__': asyncio.run(main())

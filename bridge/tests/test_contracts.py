@@ -30,4 +30,33 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(result,detections(request,output,{'broken_strand':'STRAND'}))
         self.assertEqual(detections(request,output,{'broken_strand':None}),[])
 
+    def test_pending_batch_skips_inflight_and_published(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store=JobStore(Path(directory)/'jobs.db');ids=[]
+            for _ in range(4):
+                r=self.request();store.accept(r);ids.append(r['RequestId'])
+            store.published(ids[0])
+            self.assertEqual([row[0] for row in store.pending_batch([],10)],ids[1:])
+            self.assertEqual([row[0] for row in store.pending_batch([ids[1]],1)],[ids[2]])
+            self.assertEqual(store.pending_batch(ids[1:],5),[]);store.db.close()
+
+
+class FrameTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            import numpy, cv2  # noqa: F401
+        except ImportError:
+            self.skipTest('numpy/opencv not installed')
+
+    def test_large_frame_downscaled_not_rejected(self):
+        import numpy as np
+        from processor import fit, encode
+        frame=np.zeros((5000,8000,3),np.uint8)  # 40 MP UAV frame
+        small=fit(frame,20_000_000)
+        self.assertLessEqual(small.shape[0]*small.shape[1],20_000_000)
+        self.assertAlmostEqual(small.shape[1]/small.shape[0],8000/5000,places=2)
+        self.assertGreater(len(encode(frame)),0)
+        same=np.zeros((1080,1920,3),np.uint8)
+        self.assertIs(fit(same,20_000_000),same)
+
 if __name__=='__main__':unittest.main()

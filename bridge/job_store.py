@@ -1,4 +1,4 @@
-"""Single-worker durable inbox/results. Persist before RabbitMQ ACK."""
+"""Single-process durable inbox/results. Persist before RabbitMQ ACK. Used from the event-loop thread only."""
 import hashlib
 import json
 import sqlite3
@@ -21,6 +21,14 @@ class JobStore:
 
     def pending(self):
         return self.db.execute('SELECT id,request,attempts,result FROM jobs WHERE published=0 ORDER BY rowid LIMIT 1').fetchone()
+
+    def pending_batch(self, exclude, limit):
+        """Oldest unpublished jobs not already being handled, for concurrent processing."""
+        exclude = list(exclude)
+        marks = ','.join('?' * len(exclude))
+        where = f'published=0 AND id NOT IN ({marks})' if exclude else 'published=0'
+        return self.db.execute(f'SELECT id,request,attempts,result FROM jobs WHERE {where} ORDER BY rowid LIMIT ?',
+                               (*exclude, limit)).fetchall()
 
     def attempt(self, identifier):
         self.db.execute('UPDATE jobs SET attempts=attempts+1 WHERE id=?', (identifier,)); self.db.commit()

@@ -6,6 +6,25 @@ from contracts import detections, event
 from media import download
 from modal_client import predict
 
+MAX_FRAME_PIXELS = 20_000_000  # larger UAV frames are downscaled, not rejected
+
+
+def fit(frame, max_pixels=MAX_FRAME_PIXELS):
+    """Downscale frames above max_pixels. The model letterboxes to 640 px anyway, and boxes are sent to the
+    backend normalized to the frame Modal received, so they stay valid for the original image."""
+    h, w = frame.shape[:2]
+    if h * w <= max_pixels:
+        return frame
+    scale = (max_pixels / (h * w)) ** 0.5
+    return cv2.resize(frame, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+
+
+def encode(frame):
+    ok, encoded = cv2.imencode('.jpg', fit(frame))
+    if not ok: raise ValueError('Cannot encode frame')
+    return encoded.tobytes()
+
+
 def process(request, config):
     started=time.monotonic(); results=[]; metadata=None
     with tempfile.TemporaryDirectory() as folder:
@@ -13,10 +32,7 @@ def process(request, config):
         download(request['FileUrl'],path,config['hosts'],config['max_bytes'])
         def infer(frame, index=None, timestamp=None):
             if frame is None: raise ValueError('Cannot decode media')
-            if frame.shape[0]*frame.shape[1]>20_000_000: raise ValueError('Frame too large')
-            ok,encoded=cv2.imencode('.jpg',frame)
-            if not ok: raise ValueError('Cannot encode frame')
-            output=predict(config['modal_url'],config['modal_key'],config['modal_secret'],encoded.tobytes())
+            output=predict(config['modal_url'],config['modal_key'],config['modal_secret'],encode(frame))
             results.extend(detections(request,output,config['mapping'],index,timestamp))
         if request['MediaType'].lower()=='image':
             infer(cv2.imread(str(path)))

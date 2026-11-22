@@ -12,6 +12,8 @@ def load():
     if urlparse(url).scheme!='https': raise ValueError('Modal URL must be HTTPS')
     hosts=set(filter(None,os.environ['MEDIA_ALLOWED_HOSTS'].split(',')))
     if not hosts: raise ValueError('Configure trusted storage hosts')
-    return dict(mapping=mapping,hosts=hosts,modal_url=url,modal_key=os.environ['MODAL_KEY'],
+    workers=int(os.environ.get('WORKERS','3'))
+    if not 1<=workers<=8: raise ValueError('WORKERS must be 1..8')
+    return dict(mapping=mapping,workers=workers,hosts=hosts,modal_url=url,modal_key=os.environ['MODAL_KEY'],
                 modal_secret=os.environ['MODAL_SECRET'],max_bytes=200*1024*1024,
                 max_seconds=120,max_frames=120,sample_fps=1)
