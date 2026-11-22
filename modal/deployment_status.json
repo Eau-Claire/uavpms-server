@@ -6,6 +6,10 @@
   "gpu": "T4",
   "max_containers": 1,
   "authentication": "Modal proxy tokens for HTTP; Modal profile for SDK",
-  "smoke_test": "SDK predict_jpeg succeeded on synthetic gray 640x640 JPEG; not accuracy validation",
-  "predict_ms": 44.313174999999205
+  "smoke_test": "SDK predict_jpeg on val image 1148ec66d537b89d_019630.jpg: one foreign_object box matching GT; HTTP without credentials returns 401; not an accuracy benchmark",
+  "predict_ms": 31.2,
+  "model": "seed85_curated_yolo26m",
+  "checkpoint_sha256": "8682baa083ba5148d378762ddba5c5176cafaedd72b0c2eb369d3ea992924f16",
+  "postprocess": "powerline_ai/thresholds.json (val-tuned per-class thresholds, same-class merge on, cross-class off)",
+  "deployed_at": "2026-11-22"
 }
