@@ -88,6 +88,18 @@ python prepare_model.py --checkpoint models/best.pt
 
 Xem [BE_INTEGRATION.md](BE_INTEGRATION.md) và [rabbitmq.example.json](rabbitmq.example.json). Khuyến nghị bridge worker ở mạng BE gọi Modal qua HTTPS; không mở RabbitMQ lên Internet. Endpoint hiện chỉ xử lý ảnh, chưa có consumer RabbitMQ/video worker. app.py đã tách inference, media validation và settings vào powerline_ai/.
 
+## Giao diện Streamlit test ảnh
+
+Gọi đúng endpoint đã deploy (`Detector.predict_jpeg`) bằng Modal profile của máy, không đặt token trong trang. Từ thư mục `modal`:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements-streamlit.txt
+streamlit run test_ui/streamlit_app.py --server.address 127.0.0.1
+```
+
+Mở http://127.0.0.1:8501 . Upload ảnh JPEG/PNG rồi bấm **Gửi lên AI**, hoặc nhập thư mục dataset (chứa `images/` và `labels/`) để lấy ảnh mẫu val/test ngẫu nhiên: box màu là dự đoán, box xanh lá là label đúng. Có lọc theo class, lọc thêm confidence (chỉ phía hiển thị), bảng detection và tải JSON. Mỗi ảnh là một lần gọi GPU có tính phí; lần đầu chờ cold start khoảng 15 giây.
+
 ## Giao diện web test ảnh/video
 
 Từ thư mục `modal`, tạo venv nếu chưa có (không cài pip vào Python hệ thống):
