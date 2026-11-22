@@ -1,4 +1,4 @@
-"""Persistent Docker API for the curated six-class YOLO26m checkpoint."""
+"""Persistent Docker API for the six-class YOLO26m checkpoint (shares powerline_ai with Modal)."""
 import asyncio
 import hmac
 import io
@@ -11,12 +11,12 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from PIL import Image, UnidentifiedImageError
 
-CLASSES = ('insulator', 'insulator_broken', 'insulator_flashover',
-           'bird_nest', 'foreign_object', 'broken_strand')
+from powerline_ai.postprocess import CLASSES, postprocess
+from powerline_ai.settings import MODEL_NAME, NMS_IOU, POSTPROCESS
+
 MODEL_PATH = Path(os.getenv('MODEL_PATH', '/models/best.pt'))
 DEVICE = os.getenv('DEVICE', 'cpu')
 IMAGE_SIZE = int(os.getenv('IMAGE_SIZE', '640'))
-CONFIDENCE = float(os.getenv('CONFIDENCE', '0.25'))
 MAX_BYTES = 10 * 1024 * 1024
 MAX_PIXELS = 20_000_000
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
@@ -65,16 +65,19 @@ class Detector:
 
     def _predict(self, image):
         started = time.perf_counter()
-        result = self.model.predict(image, imgsz=IMAGE_SIZE, conf=CONFIDENCE,
-                                    device=DEVICE, half=False, verbose=False)[0]
+        # Same post-processing and thresholds as the Modal endpoint (powerline_ai package).
+        result = self.model.predict(image, imgsz=IMAGE_SIZE, conf=POSTPROCESS.min_confidence,
+                                    iou=NMS_IOU, device=DEVICE, half=False, verbose=False)[0]
         boxes = result.boxes.cpu()
-        detections = [dict(class_id=int(class_id), class_name=CLASSES[int(class_id)],
-                           confidence=round(float(score), 6),
-                           bbox_xyxy=[round(float(value), 3) for value in box])
-                      for box, score, class_id in
-                      zip(boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist())]
-        return dict(model='curated_yolo26m', width=image.width, height=image.height,
-                    detections=detections,
+        raw = [dict(class_id=int(class_id), class_name=CLASSES[int(class_id)],
+                    confidence=float(score), bbox_xyxy=box)
+               for box, score, class_id in
+               zip(boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist())]
+        detections = [{**d, 'confidence': round(d['confidence'], 6),
+                       'bbox_xyxy': [round(float(v), 3) for v in d['bbox_xyxy']]}
+                      for d in postprocess(raw, POSTPROCESS)]
+        return dict(model=MODEL_NAME, width=image.width, height=image.height,
+                    detections=detections, raw_count=len(raw),
                     predict_ms=round((time.perf_counter() - started) * 1000, 2))
 
 
@@ -99,7 +102,7 @@ async def health():
 async def ready():
     if state['detector'] is None:
         raise HTTPException(503, 'Model is not loaded')
-    return {'status': 'ready', 'model': 'curated_yolo26m', 'device': DEVICE}
+    return {'status': 'ready', 'model': MODEL_NAME, 'device': DEVICE}
 
 
 @app.post('/detect')

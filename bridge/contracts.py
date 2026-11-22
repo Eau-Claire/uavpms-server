@@ -13,7 +13,7 @@ def event(request, results=None, error=None, elapsed=0, metadata=None):
     return dict(EventId=str(uuid4()), CorrelationId=request['RequestId'], AnalysisId=request['RequestId'],
                 InspectionId='00000000-0000-0000-0000-000000000000', MediaId=request['MediaId'],
                 MissionId=request['MissionId'], Status='Failed' if error else 'Completed',
-                ModelName='curated_yolo26m', ModelVersion='deployment-v1', ProcessingTimeMs=round(elapsed),
+                ModelName='seed85_curated_yolo26m', ModelVersion='deployment-v2-postprocess', ProcessingTimeMs=round(elapsed),
                 Results=results or [], VideoMetadata=metadata, ErrorCode=error,
                 ErrorMessage='Worker could not complete job' if error else None,
                 ProcessedAt=datetime.now(timezone.utc).isoformat())

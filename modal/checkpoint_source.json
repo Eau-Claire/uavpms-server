@@ -1,12 +1,14 @@
 {
   "model": "seed85_curated_yolo26m",
   "uri": "stash://bunpmc/projects/finding_seed/seed85/curated_yolo26m/weights/best.pt",
-  "status": "selected as deployment model; download, prepare_model.py and SHA-256 pending",
+  "status": "downloaded, taxonomy validated by prepare_model.py, thresholds tuned on val; not yet deployed",
   "local_path": "models/best.pt",
   "metrics": "val mAP50 0.8406 / mAP50-95 0.4797; test mAP50 0.8118 / mAP50-95 0.4573 (finding_nemo_human_reviewed_6cls v2 splits)",
   "previous": {
     "model": "curated_yolo26m (seed42)",
     "uri": "stash://bunpmc/projects/curated_yolo26m/weights/best.pt",
     "sha256": "65877bab3405bbec4a91ae888cad67c5f4a1bee8e43a56dd9331e229a12c4db0"
-  }
+  },
+  "sha256": "8682baa083ba5148d378762ddba5c5176cafaedd72b0c2eb369d3ea992924f16",
+  "size_bytes": 44019417
 }

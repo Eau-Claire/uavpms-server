@@ -55,7 +55,7 @@ class PostprocessTests(unittest.TestCase):
             self.assertEqual([d['class_name'] for d in out], ['insulator_broken'])
 
     def test_disabled_only_thresholds(self):
-        cfg = PostprocessConfig(class_confidence=LOW.class_confidence, enabled=False)
+        cfg = PostprocessConfig(class_confidence=LOW.class_confidence, merge_same_class=False, resolve_cross_class=False)
         out = postprocess([det('foreign_object', 0.8, (0, 0, 100, 100)),
                            det('foreign_object', 0.6, (20, 0, 120, 100)),
                            det('bird_nest', 0.05, (0, 0, 5, 5))], cfg)

@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 
 camera-output/
+
+# Raw prediction cache from tune_thresholds.py
+.cache/
+# Local output of prepare_model.py (hash of the private checkpoint)
+models/manifest.json

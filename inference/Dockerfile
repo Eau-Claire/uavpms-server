@@ -4,13 +4,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt ./
+COPY inference/requirements.txt ./
 RUN python -m pip install --index-url https://download.pytorch.org/whl/cpu \
       torch==2.6.0+cpu torchvision==0.21.0+cpu \
     && python -m pip install -r requirements.txt \
     && python -m pip uninstall -y opencv-python opencv-python-headless \
     && python -m pip install opencv-python-headless==4.12.0.88
-COPY server.py ./
+COPY inference/server.py ./
+COPY modal/powerline_ai ./powerline_ai
 RUN useradd --create-home --uid 10001 appuser
 USER appuser
 EXPOSE 8000

@@ -1,6 +1,8 @@
 services:
   inference:
-    build: .
+    build:
+      context: ..
+      dockerfile: inference/Dockerfile
     restart: unless-stopped
     init: true
     ports:
@@ -9,7 +11,6 @@ services:
       MODEL_PATH: /models/best.pt
       DEVICE: cpu
       IMAGE_SIZE: "640"
-      CONFIDENCE: "0.25"
       DETECT_API_TOKEN: ${DETECT_API_TOKEN:?Set DETECT_API_TOKEN in .env}
     volumes:
       - ../modal/models/best.pt:/models/best.pt:ro

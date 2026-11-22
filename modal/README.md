@@ -10,15 +10,32 @@ Kết quả YOLO thô đi qua [powerline_ai/postprocess.py](powerline_ai/postpro
 2. **Gộp box cùng class** khi IoU ≥ 0.45 hoặc box nhỏ nằm ≥ 70% trong box lớn: một lỗi chỉ còn một box (bao ngoài, giữ confidence cao nhất, field `merged` = số box đã gộp).
 3. **Xử lý khác class**: NMS của YOLO chỉ lọc trong cùng class. Hai box lỗi khác class chồng nhau (IoU ≥ 0.55) thì giữ box tin cậy hơn. Box `insulator` gần như trùng box lỗi (IoU ≥ 0.8) thì bỏ `insulator`. Box lỗi nằm bên trong box `insulator` thì giữ cả hai.
 
-Ngưỡng mặc định nằm trong `PostprocessConfig`. Nên tune trên **val** (không dùng test) bằng checkpoint đang deploy. Script ghi `powerline_ai/thresholds.json`, file này được đóng gói khi deploy:
+Ngưỡng và việc bật/tắt bước 2, 3 được **chọn từ dữ liệu**: `tune_thresholds.py` chạy checkpoint một lần trên val, thử 4 tổ hợp (có/không gộp × có/không xử lý khác class), mỗi tổ hợp tune ngưỡng từng class theo F1 (IoU ≥ 0.5), rồi giữ tổ hợp có macro-F1 cao nhất. Kết quả ghi vào `powerline_ai/thresholds.json`, được đóng gói khi deploy (Modal và Docker CPU dùng chung file này):
 
 ```bash
 python tune_thresholds.py --weights models/best.pt \
   --images /path/finding_nemo_human_reviewed_6cls/images/val \
-  --labels /path/finding_nemo_human_reviewed_6cls/labels/val
+  --labels /path/finding_nemo_human_reviewed_6cls/labels/val --device 0
+# xác nhận một lần trên test, không tune lại theo test
+python tune_thresholds.py --weights models/best.pt \
+  --images /path/finding_nemo_human_reviewed_6cls/images/test \
+  --labels /path/finding_nemo_human_reviewed_6cls/labels/test --evaluate powerline_ai/thresholds.json
 ```
 
-Script in bảng P/R/F1 theo class cho cấu hình trước (conf .25, không hậu xử lý) và sau khi tune. Response có thêm `raw_count` (số box trước hậu xử lý); các field cũ giữ nguyên.
+Dự đoán thô được cache trong `.cache/` (gitignored), khóa theo SHA-256 checkpoint. Thiếu `thresholds.json` thì dùng mặc định trong `PostprocessConfig`. Đổi checkpoint thì phải tune lại.
+
+**Cấu hình hiện tại** (seed85, tune trên val, xác nhận một lần trên test, IoU ≥ 0.5): ngưỡng insulator .35, insulator_broken .25, insulator_flashover .25, bird_nest .35, foreign_object .40, broken_strand .20; gộp box **bật**; xử lý khác class **tắt** (trên val không có cặp box lỗi khác class nào chồng IoU ≥ .55 nên bước này không đổi kết quả).
+
+| Split | Cấu hình | Precision | Recall | Box sai (FP) | Box sót (FN) | Macro-F1 |
+|---|---|---|---|---|---|---|
+| val | conf .25, không hậu xử lý | .858 | .855 | 452 | 466 | .817 |
+| val | thresholds.json | .892 | .840 | 327 | 512 | .824 |
+| test | conf .25, không hậu xử lý | .862 | .844 | 385 | 444 | .790 |
+| test | thresholds.json | .892 | .821 | 284 | 510 | .796 |
+
+Hậu xử lý giảm khoảng 27% box sai, đổi lại sót thêm khoảng 2% vật thể. Nó không sửa được box đúng vị trí nhưng sai class (ví dụ foreign_object bị đoán insulator_broken); lỗi đó cần cải thiện model.
+
+Script in bảng P/R/F1 theo class cho cấu hình trước (conf .25, không hậu xử lý) và từng tổ hợp sau khi tune. Response có thêm `raw_count` (số box trước hậu xử lý) và `merged` trong mỗi detection; các field cũ giữ nguyên.
 
 ## Chuẩn bị trên desktop
 
@@ -28,7 +45,7 @@ Chạy từ thư mục `modal`:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-prepare.txt
-python prepare_model.py --checkpoint /path/curated_yolo26m/weights/best.pt
+python prepare_model.py --checkpoint /path/seed85/curated_yolo26m/weights/best.pt
 ```
 
 Chỉ dùng checkpoint tin cậy. Script kiểm tra 6 lớp và lưu models/best.pt, models/manifest.json kèm SHA-256. Chưa tự kiểm tra kiến trúc từ filename, cần chọn đúng checkpoint. models/best.pt được đóng kèm khi deploy.

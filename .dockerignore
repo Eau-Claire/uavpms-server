@@ -1,0 +1,9 @@
+# Build context for inference/Dockerfile is the repo root (shares modal/powerline_ai).
+# Allowlist: only what the image needs; never the checkpoint, .env files or .git.
+*
+!inference/requirements.txt
+!inference/server.py
+!modal/powerline_ai/
+**/__pycache__/
+**/*.py[cod]
+**/.env

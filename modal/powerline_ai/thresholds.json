@@ -1,0 +1,40 @@
+{
+  "_source": {
+    "weights": "best.pt",
+    "weights_sha256": "8682baa083ba5148d378762ddba5c5176cafaedd72b0c2eb369d3ea992924f16",
+    "split": "finding_nemo_human_reviewed_6cls/images/val",
+    "match_iou": 0.5,
+    "objective": "per-class F1 thresholds, step choice by macro-F1",
+    "before": {
+      "macro_f1": 0.8169,
+      "micro": {
+        "precision": 0.8583072100313479,
+        "recall": 0.8545568039950062,
+        "f1": 0.856427901157335,
+        "fp": 452,
+        "fn": 466
+      }
+    },
+    "chosen": {
+      "macro_f1": 0.8244,
+      "micro": {
+        "precision": 0.8916859887379928,
+        "recall": 0.8401997503121099,
+        "f1": 0.8651775670898282,
+        "fp": 327,
+        "fn": 512
+      }
+    },
+    "tie_break": "fewer enabled steps"
+  },
+  "class_confidence": {
+    "insulator": 0.35,
+    "insulator_broken": 0.25,
+    "insulator_flashover": 0.25,
+    "bird_nest": 0.35,
+    "foreign_object": 0.4,
+    "broken_strand": 0.2
+  },
+  "merge_same_class": true,
+  "resolve_cross_class": false
+}
