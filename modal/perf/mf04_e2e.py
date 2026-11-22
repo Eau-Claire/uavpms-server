@@ -309,7 +309,9 @@ def run(a):
             analyst_sees=None if visible is None else visible.get(mid, 0)))
 
     n = len(rows)
-    checks['all_uploads_accepted'] = len(media) == len(uploads)
+    checks['all_uploads_accepted'] = bool(uploads) and len(media) == len(uploads)
+    if not rows:  # nothing reached the AI path: every other check would pass vacuously
+        checks['at_least_one_job'] = False
     checks['all_runs_completed'] = all(x['status'] == 'Completed' for x in rows)
     checks['exactly_one_run_per_media'] = all(x['runs'] == 1 for x in rows)
     checks['real_model_not_mock'] = all(x['model'] == a.expect_model for x in rows)
@@ -347,6 +349,7 @@ def run(a):
 
     summary = dict(
         label=a.label, run_at=datetime.now().isoformat(timespec='seconds'), mission=a.mission, images=n,
+        upload_errors=[dict(file=u['file'], status=u['status'], error=u.get('error')) for u in uploads if 'media_id' not in u],
         concurrency=a.concurrency, preflight=pre, bridge_events=events, duplicate=duplicate, review=review,
         timing_ms=dict(upload=stats([x['upload_ms'] for x in rows]), e2e_upload_to_db_completed=stats(e2e),
                        queue_wait_server=stats([x['queue_ms'] for x in rows]),
@@ -358,7 +361,7 @@ def run(a):
     with (out / 'jobs.jsonl').open('w', encoding='utf-8') as f:
         for x in rows:
             f.write(json.dumps(x, default=str) + '\n')
-    print(json.dumps({k: summary[k] for k in ('label', 'images', 'timing_ms', 'severity_by_class', 'logs',
+    print(json.dumps({k: summary[k] for k in ('label', 'images', 'upload_errors', 'timing_ms', 'severity_by_class', 'logs',
                                               'checks', 'result')}, indent=2, default=str))
     print('written to', out)
     return summary['result'] == 'Passed'
