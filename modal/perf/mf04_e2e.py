@@ -15,8 +15,8 @@ Subcommands
                 --restart-bridge-after S    restart the bridge S seconds into the run (AI-PERF-08)
                 --stop-bridge-for S         bridge down while uploading, started again after S seconds
                                             (jobs must wait in RabbitMQ, not be lost)
-                --duplicate-check           re-upload the first file, expect DUPLICATE_MEDIA and no new run
-                --review                    Analyst accepts one detection (MF04.3)
+                --duplicate-check           re-upload the first file to the same mission: same media, no new run
+                --review                    Analyst rejects one detection (MF04.3 review path)
 
 Read-only towards the backend code: it only calls the public API, reads the database and
 restarts/stops the ai-bridge container. Needs: pip install httpx 'psycopg[binary]'.
@@ -253,8 +253,10 @@ def run(a):
         if a.duplicate_check and media:
             p, data = payloads[0]
             r = upload(client, inspector, a.mission, p, data)
-            duplicate = dict(status=r['status'], rejected=r['status'] in (400, 409, 422)
-                             and 'DUPLICATE_MEDIA' in r.get('error', ''), body=r.get('error'))
+            # Same mission: the backend returns the existing media (idempotent); another mission: DUPLICATE_MEDIA.
+            duplicate = dict(status=r['status'], returned_media=r.get('media_id'), original_media=uploads[0].get('media_id'),
+                             passed=r['status'] == 200 and r.get('media_id') == uploads[0].get('media_id'),
+                             body=r.get('error'))
 
         conn = psycopg.connect(normalize_connection_string(os.environ['DB_CONNECTION']), autocommit=True)
         ids = list(media)
@@ -285,8 +287,9 @@ def run(a):
             if target:
                 rr = client.put(f'/api/v1/missions/{a.mission}/ai-analysis/detections/{target["id"]}/review',
                                 headers={'Authorization': f'Bearer {analyst}'},
-                                json={'decision': 'Accepted', 'notes': 'mf04 e2e review'})
-                review = dict(status=rr.status_code, detection=target['id'])
+                                json={'decision': 'Rejected', 'notes': 'mf04 e2e test upload'})
+                # Rejected: test images carry no tower, and Accepted requires one (TOWER_REQUIRED).
+                review = dict(status=rr.status_code, detection=target['id'], decision='Rejected', body=rr.text[:300])
 
     # ---------------- checks
     runs_by_media = {}
@@ -330,7 +333,7 @@ def run(a):
     checks['analyst_sees_all_detections'] = visible is not None and all(
         x['analyst_sees'] == x['detections'] for x in rows)
     if duplicate:
-        checks['duplicate_media_rejected'] = duplicate['rejected']
+        checks['duplicate_upload_idempotent'] = duplicate['passed']
     if review:
         checks['analyst_review_saved'] = review['status'] == 200
     e2e = [x['e2e_ms'] for x in rows]
