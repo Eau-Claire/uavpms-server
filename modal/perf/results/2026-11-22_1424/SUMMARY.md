@@ -4,7 +4,7 @@ Phạm vi: dịch vụ AI của MF04 (endpoint Modal `powerline-yolo26m-benchmar
 
 - Lần 1 (`2026-11-22_1323`): bản deploy trước khi sửa. Lần này phát hiện 3 lỗi.
 - Lần 2 (`2026-11-22_1424`, thư mục này): bản đã sửa. Đây là số liệu chính thức.
-- Dữ liệu: `finding_nemo_human_reviewed_6cls` (val 2.271 ảnh, test 1.931 ảnh; tập test chứa toàn bộ Finding Nemo V5).
+- Dữ liệu: `finding_nemo_human_reviewed_6cls`, nhãn cross-label đã được người accept (val 2.271 ảnh / 3.204 box, test 1.931 ảnh / 2.850 box). Cùng ảnh với Finding Nemo V5 nhưng **khác nhãn** (V5 có 2.769 box), nên số ở đây không phải số trên V5.
 - Môi trường: GPU Tesla T4 (Modal), `max_containers=1`, `scaledown_window=60 s`. Client gọi qua Modal SDK từ Việt Nam đến region us-east.
 
 ## Ngưỡng chấp nhận (định trước khi chạy)
@@ -68,7 +68,7 @@ Audit bằng SHA-256 và dHash (`yolov11/artifacts/dataset_audit/leakage_finding
 | Bỏ d ≤ 4 | 1.878 | 0,853 | 0,787 | **0,719** |
 | Chỉ 53 ảnh bị gắn cờ | 53 | 0,933 | — | 0,973 (18/19) |
 
-Kết luận: điểm tổng gần như không đổi, nhưng **foreign_object trên test bị thổi phồng khoảng 0,01–0,05 F1**, vì model đã thấy chính ảnh nền đó trong train. Năng lực FO thực tế nên báo cáo kèm con số đã bỏ leakage.
+Kết luận: điểm tổng gần như không đổi. F1 foreign_object giảm 0,046 khi bỏ 53 ảnh, nhưng các ảnh này chứa khoảng 19/111 box FO và là ảnh dễ, nên mức giảm **không thể quy hết cho leakage**. Đây là sensitivity analysis, không phải ước lượng nhân quả.
 
 ## 4. Điểm yếu của model và hướng cải thiện
 
