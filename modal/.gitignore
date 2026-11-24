@@ -9,3 +9,5 @@ camera-output/
 .cache/
 # Local output of prepare_model.py (hash of the private checkpoint)
 models/manifest.json
+.al_work/
+models/history/

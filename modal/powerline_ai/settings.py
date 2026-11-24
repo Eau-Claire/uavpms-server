@@ -3,8 +3,11 @@ from pathlib import Path
 
 from .postprocess import CLASSES, PostprocessConfig
 
-MODEL_NAME = 'seed85_curated_yolo26m'
 MODEL_PATH = '/models/best.pt'
+# Name reported with every detection: from the manifest written when the model is staged (prepare_model.py or
+# al_cycle.py promote), so a promoted model is never reported under the old name.
+_MANIFEST = Path(MODEL_PATH).with_name('manifest.json')
+MODEL_NAME = (json.loads(_MANIFEST.read_text()).get('name') if _MANIFEST.is_file() else None) or 'seed85_curated_yolo26m'
 IMAGE_SIZE = 640
 NMS_IOU = 0.6
 # Square letterbox, as in training and threshold tuning. Ultralytics' default for a single

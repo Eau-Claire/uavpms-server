@@ -115,3 +115,27 @@ python test_ui/server.py
 Mở http://127.0.0.1:8765 . Chọn ảnh JPEG/PNG hoặc video, bấm Gửi lên AI. Video mặc định 1 frame/s, tối đa 10 frame đầu (có thể chọn 1–30); hiển thị từng frame có bbox và tải JSON. Có nút dừng sau request hiện tại. Đây là UI test local dùng SDK Modal/profile của máy, không phải UI public/BE; token không đưa vào JavaScript. Preview file là local, chỉ frame được chọn mới gửi GPU. Mỗi lần chỉ xử lý một file; không tự chạy lại khi đổi lựa chọn. Giới hạn upload 100 MiB, mỗi frame 20 MP/10 MiB JPEG; không kiểm tra toàn video khi giới hạn số frame thấp.
 
 File upload tạm được xóa sau xử lý; kết quả giữ trong RAM tới job tiếp theo hoặc restart. Không có durable queue, multi-user, tự retry hay đồng bộ BE. Chỉ bind loopback, không expose service này ra Internet. Đóng tab không tự hủy job; bấm Dừng hoặc dừng process server.
+
+## Active learning (tự động train lại, gate, deploy, rollback)
+
+Hai file: `al_cycle.py` (chạy ở máy/VPS điều phối) và `al_train_kernel.py` (chạy trên Kaggle GPU). Test: `tests/test_al_cycle.py`.
+
+```bash
+PY=/path/to/python-co-modal     # vd yolov11/.venv/bin/python; cần thêm `kaggle` và `camber` trên PATH
+$PY al_cycle.py --env-file <file có CAMBER_API_KEY> init                          # một lần: tạo stash finding_model/
+$PY al_cycle.py --env-file <...> cycle --feedback <thư mục images/ + labels/>     # một vòng đầy đủ
+$PY al_cycle.py --env-file <...> fetch --cycle-id <id>                            # chạy tiếp nếu bị ngắt giữa chừng
+$PY al_cycle.py --env-file <...> rollback                                         # về model trước
+```
+
+Một vòng `cycle`:
+1. Kiểm tra feedback (YOLO 6 lớp, mỗi ảnh có file nhãn) và ngưỡng `min_feedback_images` (mặc định 30).
+2. Đẩy dataset private `<user>/uavpms-al-cycle` (feedback + champion `models/best.pt` + `powerline_ai/` + `tune_thresholds.py`), push kernel private `<user>/uavpms-al-train` trên T4; xếp hàng quá 20 phút thì thử P100, GPU cuối thì chờ tiếp.
+3. Kernel: dừng nếu ảnh feedback trùng val/test; fine-tune từ champion trên feedback + 2.000 ảnh replay (seed cố định), tune ngưỡng trên val bằng đúng code hậu xử lý đang chạy, chấm champion và challenger trên tập gate cố định `finding_nemo_human_reviewed_6cls/test`.
+4. Gate: MEAN_5 không giảm, mAP50-95 giảm ≤ 0,005, không lớp lỗi nào giảm AP50 > 0,02; kiểm tra champion trên Modal vẫn là champion lúc bắt đầu vòng.
+5. Qua gate (và `auto_deploy`): lưu champion lên Camber → thay `models/best.pt`, `models/manifest.json` (tên `al_<cycle>_yolo26m`), `powerline_ai/thresholds.json` → `modal deploy` → smoke: endpoint phải báo đúng sha model + ngưỡng và trả detection hợp lệ < 3 s. Lỗi bất kỳ sau bước thay file → tự khôi phục champion cũ và deploy lại.
+6. Ghi `stash://bunpmc/projects/finding_model/`: `registry.json` (current, previous, mọi vòng), `models/<sha16>/`, `cycles/<id>/` (metrics, gate report, log).
+
+Mã thoát: 0 deployed (hoặc qua gate khi `auto_deploy=false`), 2 lỗi cấu hình/Kaggle, 3 trượt gate, 4 đã rollback, 5 rollback thất bại (cần người xử lý). Chỉ một vòng chạy tại một thời điểm (`.al_work/cycle.lock`). Không có gì chạy giữa các vòng: BE quyết định khi nào gọi.
+
+Endpoint thêm `Detector.model_info()` (tên, sha model, sha ngưỡng). Tên model lấy từ `models/manifest.json` nếu có; bridge gửi BE đúng tên model mà endpoint trả về. Sau khi đổi model, chạy E2E với `perf/mf04_e2e.py --expect-model <tên mới>`.

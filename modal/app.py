@@ -14,6 +14,8 @@ image = (modal.Image.debian_slim(python_version='3.11')
          .pip_install('ultralytics==8.4.172', 'fastapi', 'pillow')
          .add_local_dir(ROOT / 'powerline_ai', '/root/powerline_ai')
          .add_local_file(MODEL, '/models/best.pt'))
+if (ROOT / 'models/manifest.json').is_file():   # optional: carries the served model name (al_cycle.py promote)
+    image = image.add_local_file(ROOT / 'models/manifest.json', '/models/manifest.json')
 
 
 @app.cls(image=image, gpu='T4', max_containers=1, scaledown_window=60, timeout=120)
@@ -40,6 +42,17 @@ class Detector:
     def predict_jpeg(self, data: bytes):
         """Authenticated SDK path for image and sampled-video tests; uses Modal profile."""
         return self._run(data)
+
+    @modal.method()
+    def model_info(self):
+        """Which model and thresholds this container serves (checked after every deploy)."""
+        import hashlib, json
+        from pathlib import Path
+        from powerline_ai.settings import MODEL_NAME, MODEL_PATH
+        digest = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+        thresholds = Path('/root/powerline_ai/thresholds.json')
+        return dict(name=MODEL_NAME, model_sha256=digest(MODEL_PATH),
+                    thresholds_sha256=digest(thresholds) if thresholds.is_file() else None)
 
     @modal.method()
     def resource_stats(self):

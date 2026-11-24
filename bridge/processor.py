@@ -26,13 +26,14 @@ def encode(frame):
 
 
 def process(request, config):
-    started=time.monotonic(); results=[]; metadata=None
+    started=time.monotonic(); results=[]; metadata=None; served=[]   # model name reported by the endpoint
     with tempfile.TemporaryDirectory() as folder:
         path=Path(folder)/'media'
         download(request['FileUrl'],path,config['hosts'],config['max_bytes'])
         def infer(frame, index=None, timestamp=None):
             if frame is None: raise ValueError('Cannot decode media')
             output=predict(config['modal_url'],config['modal_key'],config['modal_secret'],encode(frame))
+            if output.get('model'): served.append(output['model'])
             results.extend(detections(request,output,config['mapping'],index,timestamp))
         if request['MediaType'].lower()=='image':
             infer(cv2.imread(str(path)))
@@ -49,6 +50,7 @@ def process(request, config):
                     if not ok: raise ValueError('Cannot decode sampled video frame')
                     infer(frame,index,index/fps);sampled+=1
             finally: cap.release()
-    result=event(request,results,elapsed=(time.monotonic()-started)*1000,metadata=metadata)
+    result=event(request,results,elapsed=(time.monotonic()-started)*1000,metadata=metadata,
+                 model=served[-1] if served else None)
     result['RawResult']={'VideoSamplingFps':config['sample_fps'] if metadata else None,'Tracking':False}
     return result

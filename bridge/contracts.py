@@ -9,11 +9,13 @@ def validate(request):
     if request['MediaType'].lower() not in ('image', 'video'): raise ValueError('Unsupported MediaType')
     if not isinstance(request['FileUrl'], str): raise ValueError('Missing FileUrl')
 
-def event(request, results=None, error=None, elapsed=0, metadata=None):
+DEFAULT_MODEL = 'seed85_curated_yolo26m'
+
+def event(request, results=None, error=None, elapsed=0, metadata=None, model=None):
     return dict(EventId=str(uuid4()), CorrelationId=request['RequestId'], AnalysisId=request['RequestId'],
                 InspectionId='00000000-0000-0000-0000-000000000000', MediaId=request['MediaId'],
                 MissionId=request['MissionId'], Status='Failed' if error else 'Completed',
-                ModelName='seed85_curated_yolo26m', ModelVersion='deployment-v2-postprocess', ProcessingTimeMs=round(elapsed),
+                ModelName=model or DEFAULT_MODEL, ModelVersion='deployment-v2-postprocess', ProcessingTimeMs=round(elapsed),
                 Results=results or [], VideoMetadata=metadata, ErrorCode=error,
                 ErrorMessage='Worker could not complete job' if error else None,
                 ProcessedAt=datetime.now(timezone.utc).isoformat())

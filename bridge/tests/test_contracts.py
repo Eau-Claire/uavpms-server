@@ -12,6 +12,11 @@ class BridgeTests(unittest.TestCase):
     def request(self):
         return dict(RequestId=str(uuid4()),MediaId=str(uuid4()),MissionId=str(uuid4()),MediaType='Image',FileUrl='https://storage.test/image')
 
+    def test_event_reports_served_model(self):
+        request=self.request()
+        self.assertEqual(event(request)['ModelName'],'seed85_curated_yolo26m')
+        self.assertEqual(event(request,model='al_20261201T000000Z_yolo26m')['ModelName'],'al_20261201T000000Z_yolo26m')
+
     def test_durable_handoff_replay_conflict_and_result(self):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'jobs.db';store=JobStore(path);request=self.request()
