@@ -5,6 +5,8 @@ batch, it creates a TrainingBatches row, marks all queued label sets Batched, ex
 (images from MinIO; video frames cut at FrameIndex), runs `modal/al_cycle.py cycle` (Kaggle fine-tune -> gate on Finding
 Nemo val -> Modal deploy + smoke test, automatic rollback) and records the outcome:
   deployed      -> label sets become Trained
+Every batch also re-trains on previously Trained label sets (up to AL_MAX_PAST, newest first) so earlier feedback is
+not forgotten; they stay Trained and do not count toward AL_MIN_IMAGES.
   anything else -> label sets go back to Queued; they join the next batch, which needs AL_MIN_IMAGES *new* images.
 One batch at a time (unique index on running batches + single process). After `rollback_failed` the worker pauses
 until someone fixes production and marks that batch (it never retries blindly).
@@ -14,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -133,6 +136,7 @@ class Worker:
         self.enabled = env.get('AL_ENABLED', 'false').lower() == 'true'
         self.min_images = int(env.get('AL_MIN_IMAGES', '30'))
         self.poll_s = int(env.get('AL_POLL_SECONDS', '600'))
+        self.max_past = int(env.get('AL_MAX_PAST', '500'))
         self.modal_dir = Path(env.get('AL_MODAL_DIR', '/data/modal'))
         self.cycle_config = env.get('AL_CYCLE_CONFIG') or None
         self.db = parse_npgsql(env['DB_CONNECTION'])
@@ -188,6 +192,19 @@ class Worker:
             r['bucket'], r['object'] = storage_key(urls.get(r['media_id'], ''), self.bucket)
         return batch_id, cycle_id, rows
 
+    def past_rows(self, conn, batch_id) -> list[dict]:
+        """Label sets used by earlier deployed batches: replayed with every new batch against forgetting."""
+        with conn.cursor() as cur:
+            cur.execute('''SELECT s."Id" AS id, s."FrameIndex" AS frame_index, s."Boxes"::text AS boxes, m."FileUrl" AS url
+                           FROM "ImageLabelSets" s JOIN "InspectionMedia" m ON m."Id" = s."MediaId"
+                           WHERE s."TrainingStatus" = 'Trained' AND s."TrainingBatchId" IS DISTINCT FROM %s
+                           ORDER BY s."SubmittedAt" DESC LIMIT %s''', (batch_id, self.max_past))
+            rows = cur.fetchall()
+        conn.commit()
+        for r in rows:
+            r['bucket'], r['object'] = storage_key(r['url'], self.bucket)
+        return rows
+
     def finish_batch(self, conn, batch_id, status: str, result: dict, model: dict | None):
         trained = status == 'deployed'
         with conn.cursor() as cur:
@@ -226,13 +243,18 @@ class Worker:
             if done == 0:
                 self.finish_batch(conn, batch_id, 'error', {'export_errors': errors}, None)
                 return
+            past = self.past_rows(conn, batch_id)
+            past_done, past_errors = export_feedback(past, feedback, self.fetch) if past else (0, [])
+            log.info('batch %s: replaying %s/%s earlier feedback images', batch_id, past_done, len(past))
             status, result = self.run_cycle(['cycle', '--feedback', str(feedback), '--cycle-id', cycle_id, '--force'], cycle_id)
-            result['export'] = {'exported': done, 'errors': errors}
+            result['export'] = {'exported': done, 'errors': errors, 'past_replayed': past_done, 'past_errors': past_errors[:20]}
             self.finish_batch(conn, batch_id, status, result, result['outcome'].get('model'))
         except Exception as exc:
             log.exception('batch %s failed', batch_id)
             conn.rollback()
             self.finish_batch(conn, batch_id, 'error', {'error': str(exc)}, None)
+        finally:
+            shutil.rmtree(feedback, ignore_errors=True)   # the bundle is on Kaggle; do not fill the disk
 
     def resume_running(self, conn):
         """A batch left Running by a restart: resume waiting for its Kaggle kernel, or give its images back."""

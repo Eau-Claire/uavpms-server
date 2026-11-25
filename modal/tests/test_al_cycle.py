@@ -54,6 +54,30 @@ class GateTests(unittest.TestCase):
     def test_insulator_drop_does_not_block(self):
         self.assertTrue(al.gate(metrics(cc_drop=('insulator', 0.10)), self.R)['passed'])
 
+    BASE = {'MEAN_5': 0.80, 'mAP50_95': 0.47, 'ap50': {c: 0.8 for c in al.DEFECTS}}
+
+    def test_floor_blocks_slow_drift(self):
+        # champion already drifted below the seed85 floor; a challenger equal to it passes vs champion but not vs floor
+        m = metrics(ch_mean5=0.79, cc_mean5=0.79)
+        self.assertTrue(al.gate(m, self.R)['passed'])
+        g = al.gate(m, self.R, self.BASE)
+        self.assertFalse(g['passed']); self.assertFalse(g['checks']['baseline_mean5'])
+        self.assertEqual(g['vs_baseline']['MEAN_5'], -0.01)
+
+    def test_floor_uses_same_tolerances(self):
+        m = metrics(ch_m=0.466, cc_m=0.466)                       # 0.004 below floor: within 0.005
+        self.assertTrue(al.gate(m, self.R, self.BASE)['checks']['baseline_map50_95'])
+        m = metrics(cc_drop=('foreign_object', 0.03))             # 0.03 below floor for one defect class
+        self.assertFalse(al.gate(m, self.R, self.BASE)['checks']['baseline_defect_classes'])
+
+    def test_floor_passes_when_at_or_above(self):
+        self.assertTrue(al.gate(metrics(ch_mean5=0.80, cc_mean5=0.81), self.R, self.BASE)['passed'])
+
+    def test_default_baseline_is_the_serving_seed85(self):
+        b = al.DEFAULTS['baseline']
+        self.assertEqual(b['weights_sha256'][:12], '8682baa083ba')
+        self.assertEqual(set(b['ap50']), set(al.DEFECTS))
+
 
 class FeedbackTests(unittest.TestCase):
     def setUp(self):
@@ -168,6 +192,7 @@ class CycleTests(unittest.TestCase):
 
     def cfg(self, **kw):
         c = json.loads(json.dumps(al.DEFAULTS))
+        c['baseline'] = None   # these tests exercise the deploy flow; the floor has its own tests (GateTests)
         c.update(kw)
         return c
 
@@ -193,6 +218,14 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(self.stash[f'{al.DEFAULTS["stash_root"]}/models/{old}/best.pt'], b'champion-weights')
         self.assertIn(f'{al.DEFAULTS["stash_root"]}/cycles/c1/gate_report.md', self.stash)
         self.assertFalse((self.tmp / 'work' / 'cycle.lock').exists())
+
+    def test_untuned_thresholds_are_never_deployed(self):
+        m = metrics(); m['thresholds_tuned'] = False
+        with mock.patch.object(al, 'kaggle', side_effect=self.fake_kaggle(m)):
+            with self.assertRaisesRegex(al.CycleError, 'not tuned'):
+                al.cmd_cycle(self.args(), self.cfg())
+        self.assertEqual((self.modal / 'models' / 'best.pt').read_bytes(), b'champion-weights')
+        self.assertEqual(self.deployed, [])
 
     def test_gate_fail_changes_nothing(self):
         with mock.patch.object(al, 'kaggle', side_effect=self.fake_kaggle(metrics(cc_mean5=0.70))):

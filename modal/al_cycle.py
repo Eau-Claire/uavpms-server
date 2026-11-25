@@ -55,9 +55,18 @@ DEFAULTS = {
     'replay_images': 2000,
     'seed': 0,
     'ultralytics': '8.4.172',
-    'train': {'epochs': 5, 'imgsz': 640, 'batch': 16, 'lr0': 1e-4, 'lrf': 0.1, 'warmup_epochs': 0, 'close_mosaic': 2},
+    # Gentle fine-tune: frozen backbone (first 10 layers), low LR, last epoch (no checkpoint selection on the gate set).
+    'train': {'epochs': 5, 'imgsz': 640, 'batch': 16, 'lr0': 5e-5, 'lrf': 0.1, 'warmup_epochs': 0, 'close_mosaic': 2,
+              'freeze': 10},
     # Gate: the challenger must not be worse than the champion on the fixed gate set.
     'gate': {'min_mean5_gain': 0.0, 'max_map50_95_drop': 0.005, 'max_defect_ap50_drop': 0.02},
+    # Fixed floor: the original seed85 model on the gate set (Finding Nemo val, 2,271 images). Every promoted model must
+    # also stay within the same tolerances of it, so small per-cycle drops cannot accumulate over many cycles.
+    'baseline': {'name': 'seed85_curated_yolo26m',
+                 'weights_sha256': '8682baa083ba5148d378762ddba5c5176cafaedd72b0c2eb369d3ea992924f16',
+                 'MEAN_5': 0.8221, 'mAP50_95': 0.4803,
+                 'ap50': {'insulator_broken': 0.8336, 'insulator_flashover': 0.796, 'bird_nest': 0.9358,
+                          'foreign_object': 0.7781, 'broken_strand': 0.7668}},
     'auto_deploy': True,
     'modal_app': 'powerline-yolo26m-benchmark',
     'modal_env': 'main',
@@ -217,7 +226,9 @@ def validate_feedback(d: Path) -> list[Path]:
     return imgs
 
 
-def gate(metrics: dict, rules: dict) -> dict:
+def gate(metrics: dict, rules: dict, baseline: dict | None = None) -> dict:
+    """Challenger vs the serving champion and vs the fixed baseline (seed85), same tolerances for both.
+    Also imported by the Kaggle kernel (shipped in the bundle) to skip threshold tuning for a failing challenger."""
     ch, cc = metrics['champion'], metrics['challenger']
     checks = {
         'mean5': cc['MEAN_5'] - ch['MEAN_5'] >= rules['min_mean5_gain'],
@@ -225,12 +236,21 @@ def gate(metrics: dict, rules: dict) -> dict:
     }
     drops = {c: round(ch['per_class'][c]['ap50'] - cc['per_class'][c]['ap50'], 4) for c in DEFECTS}
     checks['defect_classes'] = all(v <= rules['max_defect_ap50_drop'] for v in drops.values())
+    floor = None
+    if baseline:
+        floor = {'MEAN_5': round(cc['MEAN_5'] - baseline['MEAN_5'], 4),
+                 'mAP50_95': round(cc['mAP50_95'] - baseline['mAP50_95'], 4),
+                 'ap50': {c: round(cc['per_class'][c]['ap50'] - baseline['ap50'][c], 4) for c in DEFECTS}}
+        checks['baseline_mean5'] = floor['MEAN_5'] >= rules['min_mean5_gain']
+        checks['baseline_map50_95'] = -floor['mAP50_95'] <= rules['max_map50_95_drop']
+        checks['baseline_defect_classes'] = all(-v <= rules['max_defect_ap50_drop'] for v in floor['ap50'].values())
     return {
         'passed': all(checks.values()),
         'checks': checks,
         'delta': {'MEAN_5': round(cc['MEAN_5'] - ch['MEAN_5'], 4), 'mAP50': round(cc['mAP50'] - ch['mAP50'], 4),
                   'mAP50_95': round(cc['mAP50_95'] - ch['mAP50_95'], 4)},
         'defect_ap50_drop': drops,
+        'vs_baseline': floor,
         'rules': rules,
     }
 
@@ -245,6 +265,9 @@ def write_gate_report(result: Path, metrics: dict, g: dict) -> str:
           f'Gate set: {metrics["gate_set"]["name"]} ({metrics["gate_set"]["images"]} images). '
           f'Train: {metrics["train_set"]["feedback_images"]} feedback + {metrics["train_set"]["replay_images"]} replay images.\n\n'
           '| Metric | Champion | Challenger | Δ |\n|---|---:|---:|---:|\n' + '\n'.join(rows) + '\n\n'
+          + (f'Challenger vs baseline (seed85): MEAN_5 {g["vs_baseline"]["MEAN_5"]:+.4f}, '
+             f'mAP50_95 {g["vs_baseline"]["mAP50_95"]:+.4f}, defect AP50 {json.dumps(g["vs_baseline"]["ap50"])}\n\n'
+             if g.get('vs_baseline') else '') +
           f'Rules: {json.dumps(g["rules"])}\n\nChampion sha256 `{ch["weights_sha256"]}`, challenger sha256 `{cc["weights_sha256"]}`.\n')
     (result / 'gate.json').write_text(json.dumps(g, indent=2))
     (result / 'gate_report.md').write_text(md)
@@ -355,9 +378,11 @@ def build_bundle(feedback: Path, imgs: list[Path], cfg: dict, user: str, cycle_i
     shutil.copytree(MODAL_DIR / 'powerline_ai', code / 'powerline_ai',
                     ignore=shutil.ignore_patterns('__pycache__', 'thresholds.json'))
     shutil.copy2(MODAL_DIR / 'tune_thresholds.py', code / 'tune_thresholds.py')
+    shutil.copy2(Path(__file__).resolve(), code / 'al_cycle.py')   # gate() is shared with the kernel
     (bundle / 'cycle.json').write_text(json.dumps({
         'cycle_id': cycle_id, 'champion_sha256': sha256(CHAMPION), 'seed': cfg['seed'],
         'replay_images': cfg['replay_images'], 'ultralytics': cfg['ultralytics'], 'train': cfg['train'],
+        'gate': cfg['gate'], 'baseline': cfg.get('baseline'),
         'feedback_images': len(imgs)}, indent=2))
     (bundle / 'dataset-metadata.json').write_text(json.dumps({
         'title': 'UAV-PMS active learning cycle', 'id': f'{user}/{cfg["dataset_slug"]}', 'licenses': [{'name': 'other'}]}))
@@ -503,8 +528,10 @@ def _gate_and_deploy(a, cfg, cycle_id):
         raise CycleError('the serving champion changed since this cycle started; not deploying a stale comparison')
     if sha256(result / 'thresholds.json') != metrics.get('challenger_thresholds_sha256'):
         raise CycleError('thresholds.json does not match metrics.json')
-    g = gate(metrics, cfg['gate'])
+    g = gate(metrics, cfg['gate'], cfg.get('baseline'))
     print(write_gate_report(result, metrics, g))
+    if g['passed'] and not metrics.get('thresholds_tuned', True):
+        raise CycleError('challenger passed the gate here but its thresholds were not tuned in the kernel')
     if not g['passed']:
         outcome = {'status': 'gate_failed', 'model': current_entry()}
     elif not cfg['auto_deploy']:
@@ -571,7 +598,7 @@ def cmd_init(a, cfg):
 
 def cmd_gate(a, cfg):
     metrics = json.loads((a.result / 'metrics.json').read_text())
-    g = gate(metrics, cfg['gate'])
+    g = gate(metrics, cfg['gate'], cfg.get('baseline'))
     print(write_gate_report(a.result, metrics, g))
     return 0 if g['passed'] else 3
 
