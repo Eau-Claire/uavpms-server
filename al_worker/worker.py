@@ -276,8 +276,14 @@ class Worker:
                  self.enabled, self.min_images, self.poll_s, self.modal_dir)
         if not (self.modal_dir / 'models' / 'best.pt').exists():
             raise SystemExit(f'champion not found: {self.modal_dir / "models" / "best.pt"}')
-        with self.connect() as conn:
-            self.resume_running(conn)
+        while True:   # the label service creates the tables on its own start; wait for it instead of crashing
+            try:
+                with self.connect() as conn:
+                    self.resume_running(conn)
+                break
+            except Exception as exc:
+                log.warning('database not ready (%s); retrying in 30 s', str(exc).splitlines()[0])
+                time.sleep(30)
         while True:
             try:
                 with self.connect() as conn:
