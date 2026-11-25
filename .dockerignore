@@ -4,6 +4,14 @@
 !inference/requirements.txt
 !inference/server.py
 !modal/powerline_ai/
+# al_worker/Dockerfile (active-learning worker): code only, the model state lives in a volume
+!al_worker/requirements.txt
+!al_worker/worker.py
+!al_worker/entrypoint.sh
+!modal/app.py
+!modal/al_cycle.py
+!modal/al_train_kernel.py
+!modal/tune_thresholds.py
 **/__pycache__/
 **/*.py[cod]
 **/.env

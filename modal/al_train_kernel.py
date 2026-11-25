@@ -2,11 +2,13 @@
 
 Inputs (attached Kaggle datasets, found automatically under /kaggle/input):
   - the cycle bundle (pushed by al_cycle.py): cycle.json, champion.pt, feedback/images, feedback/labels
-  - Finding Nemo (tydapchai/finding-nemo-human-reviewed-6cls): replay pool (train), selection (val), gate set (test)
+  - Finding Nemo (tydapchai/finding-nemo-human-reviewed-6cls): replay pool (train), gate set + threshold tuning (val).
+    The test split is never used here, so it stays a clean held-out set for reporting.
 Outputs (/kaggle/working/result): challenger.pt, thresholds.json (tuned on val with the serving code shipped in the
 bundle), metrics.json, train_results.csv, kernel.log
 
-The gate set is never trained on: the kernel stops if a feedback image has the same SHA-256 as a gate image.
+The gate set is never trained on: the kernel stops if a feedback image has the same SHA-256 as a val or test image.
+The challenger is the last epoch (fixed schedule), so no checkpoint is selected on the gate set.
 """
 from __future__ import annotations
 
@@ -63,7 +65,7 @@ def link_pair(img: Path, label_dir: Path, out_img: Path, out_lbl: Path, prefix: 
 
 def evaluate(weights: Path, data_yaml: Path, imgsz: int) -> dict:
     from ultralytics import YOLO
-    r = YOLO(str(weights)).val(data=str(data_yaml), split='test', imgsz=imgsz, batch=16, plots=False,
+    r = YOLO(str(weights)).val(data=str(data_yaml), split='val', imgsz=imgsz, batch=16, plots=False,
                                verbose=False, project=str(WORK / 'eval'), name=weights.stem, exist_ok=True)
     ap50 = [float(x) for x in r.box.ap50]
     ap = [float(x) for x in r.box.ap]
@@ -98,8 +100,8 @@ def main():
 
     fb_img, fb_lbl = bundle / 'feedback' / 'images', bundle / 'feedback' / 'labels'
     feedback = images_in(fb_img)
-    gate_imgs = images_in(nemo / 'images' / 'test')
-    # Feedback must not contain test (gate) or val (checkpoint selection + threshold tuning) images.
+    gate_imgs = images_in(nemo / 'images' / 'val')
+    # Feedback must not contain val (gate + threshold tuning) or test (held-out reporting set) images.
     held_out = {sha256(p): split for split in ('test', 'val') for p in images_in(nemo / 'images' / split)}
     leaked = [(p.name, held_out[h]) for p in feedback if (h := sha256(p)) in held_out]
     if leaked:
@@ -110,7 +112,7 @@ def main():
     ds = WORK / 'al_dataset'
     if ds.exists():
         shutil.rmtree(ds)
-    for split in ('train', 'val', 'test'):
+    for split in ('train', 'val'):
         (ds / 'images' / split).mkdir(parents=True)
         (ds / 'labels' / split).mkdir(parents=True)
     for p in feedback:
@@ -120,11 +122,10 @@ def main():
     replay = rng.sample(pool, min(cfg['replay_images'], len(pool)))
     for p in replay:
         link_pair(p, nemo / 'labels' / 'train', ds / 'images' / 'train', ds / 'labels' / 'train', 'rp_')
-    for split in ('val', 'test'):   # val: checkpoint selection; test: fixed gate set
-        for p in images_in(nemo / 'images' / split):
-            link_pair(p, nemo / 'labels' / split, ds / 'images' / split, ds / 'labels' / split, '')
+    for p in images_in(nemo / 'images' / 'val'):   # gate set and threshold tuning
+        link_pair(p, nemo / 'labels' / 'val', ds / 'images' / 'val', ds / 'labels' / 'val', '')
     data_yaml = ds / 'data.yaml'
-    data_yaml.write_text('path: ' + str(ds) + '\ntrain: images/train\nval: images/val\ntest: images/test\nnames:\n'
+    data_yaml.write_text('path: ' + str(ds) + '\ntrain: images/train\nval: images/val\nnames:\n'
                          + ''.join(f'  {i}: {c}\n' for i, c in enumerate(CLASSES)))
     log(f'train set: {len(feedback)} feedback + {len(replay)} replay')
 
@@ -138,8 +139,7 @@ def main():
                 close_mosaic=tr['close_mosaic'], amp=True, seed=cfg['seed'], deterministic=True, workers=2,
                 device=0, plots=False, project=str(WORK / 'runs'), name='challenger', exist_ok=True)
     run = WORK / 'runs' / 'challenger'
-    best = run / 'weights' / 'best.pt'
-    shutil.copy2(best, RESULT / 'challenger.pt')
+    shutil.copy2(run / 'weights' / 'last.pt', RESULT / 'challenger.pt')   # fixed schedule, no selection on val
     if (run / 'results.csv').exists():
         shutil.copy2(run / 'results.csv', RESULT / 'train_results.csv')
 
@@ -154,7 +154,7 @@ def main():
     log('evaluating champion and challenger on the gate set')
     metrics = {
         'cycle_id': cfg['cycle_id'],
-        'gate_set': {'name': 'finding_nemo_human_reviewed_6cls/test', 'images': len(gate_imgs)},
+        'gate_set': {'name': 'finding_nemo_human_reviewed_6cls/val', 'images': len(gate_imgs)},
         'train_set': {'feedback_images': len(feedback), 'replay_images': len(replay), 'seed': cfg['seed']},
         'champion': evaluate(champion, data_yaml, tr['imgsz']),
         'challenger': evaluate(RESULT / 'challenger.pt', data_yaml, tr['imgsz']),

@@ -131,7 +131,7 @@ $PY al_cycle.py --env-file <...> rollback                                       
 Một vòng `cycle`:
 1. Kiểm tra feedback (YOLO 6 lớp, mỗi ảnh có file nhãn) và ngưỡng `min_feedback_images` (mặc định 30).
 2. Đẩy dataset private `<user>/uavpms-al-cycle` (feedback + champion `models/best.pt` + `powerline_ai/` + `tune_thresholds.py`), push kernel private `<user>/uavpms-al-train` trên T4; xếp hàng quá 20 phút thì thử P100, GPU cuối thì chờ tiếp.
-3. Kernel: dừng nếu ảnh feedback trùng val/test; fine-tune từ champion trên feedback + 2.000 ảnh replay (seed cố định), tune ngưỡng trên val bằng đúng code hậu xử lý đang chạy, chấm champion và challenger trên tập gate cố định `finding_nemo_human_reviewed_6cls/test`.
+3. Kernel: dừng nếu ảnh feedback trùng val/test; fine-tune từ champion trên feedback + 2.000 ảnh replay (seed cố định), tune ngưỡng trên val bằng đúng code hậu xử lý đang chạy, lấy epoch cuối (lịch train cố định, không chọn checkpoint), chấm champion và challenger trên tập gate cố định `finding_nemo_human_reviewed_6cls/val`. Tập test không dùng ở đây để giữ sạch cho báo cáo.
 4. Gate: MEAN_5 không giảm, mAP50-95 giảm ≤ 0,005, không lớp lỗi nào giảm AP50 > 0,02; kiểm tra champion trên Modal vẫn là champion lúc bắt đầu vòng.
 5. Qua gate (và `auto_deploy`): lưu champion lên Camber → thay `models/best.pt`, `models/manifest.json` (tên `al_<cycle>_yolo26m`), `powerline_ai/thresholds.json` → `modal deploy` → smoke: endpoint phải báo đúng sha model + ngưỡng và trả detection hợp lệ < 3 s. Lỗi bất kỳ sau bước thay file → tự khôi phục champion cũ và deploy lại.
 6. Ghi `stash://bunpmc/projects/finding_model/`: `registry.json` (current, previous, mọi vòng), `models/<sha16>/`, `cycles/<id>/` (metrics, gate report, log).
