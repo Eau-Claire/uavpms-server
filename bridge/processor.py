@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 import cv2
 from contracts import detections, event
+from frames import best_per_defect, save_best_frames
 from media import download
 from modal_client import predict
 
@@ -44,12 +45,23 @@ def process(request, config):
                 if fps<=0 or count<=0 or count/fps>config['max_seconds']: raise ValueError('Invalid or too long video')
                 metadata=dict(Duration=count/fps,Fps=fps,Width=int(cap.get(3)),Height=int(cap.get(4)))
                 step=max(1,round(fps/config['sample_fps'])); sampled=0
+                frames_with_defects=[]  # (sample number, detections of that frame)
                 for index in range(0,int(count),step):
                     if sampled>=config['max_frames']: raise ValueError('Video sample limit exceeded')
                     cap.set(cv2.CAP_PROP_POS_FRAMES,index);ok,frame=cap.read()
                     if not ok: raise ValueError('Cannot decode sampled video frame')
-                    infer(frame,index,index/fps);sampled+=1
+                    before=len(results)
+                    infer(frame,index,index/fps)
+                    if len(results)>before:
+                        # Same encoding as the frame sent to Modal, so the saved frame matches the boxes.
+                        (Path(folder)/f'{index}.jpg').write_bytes(encode(frame))
+                        frames_with_defects.append((sampled,results[before:]))
+                    sampled+=1
             finally: cap.release()
+            # One detection per defect: the highest-confidence one, with its frame saved as ImageUrl.
+            results=best_per_defect(frames_with_defects)
+            if config['frame_store']:
+                save_best_frames(results,request,Path(folder),config['frame_store'])
     result=event(request,results,elapsed=(time.monotonic()-started)*1000,metadata=metadata,
                  model=served[-1] if served else None)
     result['RawResult']={'VideoSamplingFps':config['sample_fps'] if metadata else None,'Tracking':False}

@@ -4,3 +4,4 @@ requests>=2.32,<3
 # wheels use a higher CPU baseline and fail during import on this host.
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
+minio==7.2.10

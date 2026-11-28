@@ -1,6 +1,7 @@
 # RabbitMQ → Modal bridge
 
-Chạy cạnh BE trên Linux/Docker, không chạy consumer trong Modal. Hỗ trợ ảnh và video lấy mẫu 1 fps (tối đa 120 s/120 frame/200 MiB); không tracking. Giới hạn nằm trong config.py. Fail toàn job nếu vượt giới hạn, không trả kết quả đầy đủ giả từ video bị cắt ngắn.
+Chạy cạnh BE trên Linux/Docker, không chạy consumer trong Modal. Hỗ trợ ảnh và video lấy mẫu 1 fps (tối đa 120 s/120 frame/200 MiB); không tracking.
+Video: detection cùng lớp, box chồng nhau (IoU ≥ 0,3) ở các frame lấy mẫu gần nhau được coi là cùng một lỗi; mỗi lỗi chỉ giữ detection có confidence cao nhất, frame đó (sạch, không vẽ box) được lưu lên MinIO `<bucket>/frames/<MediaId>/<RequestId>/<FrameIndex>.jpg` và gửi về BE trong `ImageUrl` (frames.py). Cần các biến `MINIO_*` (cùng tên với .env của BE); thiếu thì không lưu frame. Ảnh tĩnh không đổi. Giới hạn nằm trong config.py. Fail toàn job nếu vượt giới hạn, không trả kết quả đầy đủ giả từ video bị cắt ngắn.
 
 ```bash
 cp .env.example .env
@@ -18,6 +19,7 @@ Module:
 - media.py: tải từ allowlist host, không follow redirect, giới hạn byte/thời gian.
 - modal_client.py: HTTPS inference, proxy auth.
 - processor.py: ảnh/video sampling.
+- frames.py: gom detection theo lỗi trong video, lưu frame tốt nhất lên MinIO.
 - contracts.py: normalization, category map, deterministic detection IDs.
 
 ACK request ngay sau khi commit SQLite. Volume `bridge-state` là bắt buộc: mất volume sẽ mất job đã ACK. Chỉ chạy một replica; file lock chặn hai worker dùng cùng volume. Không scale ngang với hai volume riêng. Disk chứa job và signed media URL, cần bảo vệ và theo dõi dung lượng; chưa có retention/cleanup tự động hoặc giới hạn backlog.

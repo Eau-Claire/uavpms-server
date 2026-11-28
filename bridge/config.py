@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+from frames import FrameStore, storage_from_env
 
 def load():
     mapping=json.loads(Path(os.environ.get('CATEGORY_MAP','categories.json')).read_text())
@@ -14,6 +15,9 @@ def load():
     if not hosts: raise ValueError('Configure trusted storage hosts')
     workers=int(os.environ.get('WORKERS','3'))
     if not 1<=workers<=8: raise ValueError('WORKERS must be 1..8')
+    storage=storage_from_env()
+    frame_store=FrameStore(storage) if storage else None
     return dict(mapping=mapping,workers=workers,hosts=hosts,modal_url=url,modal_key=os.environ['MODAL_KEY'],
                 modal_secret=os.environ['MODAL_SECRET'],max_bytes=200*1024*1024,
-                max_seconds=120,max_frames=120,sample_fps=1)
+                max_seconds=120,max_frames=120,sample_fps=1,
+                frame_store=frame_store)
